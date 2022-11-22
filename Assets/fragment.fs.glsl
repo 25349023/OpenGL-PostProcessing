@@ -2,9 +2,6 @@
 
 layout (location = 0) out vec4 fragColor;
 
-uniform mat4 um4mv;
-uniform mat4 um4p;
-
 in VertexData
 {
     vec3 N; // eye space normal
@@ -13,7 +10,7 @@ in VertexData
     vec2 texcoord;
 } vertexData;
 
-uniform sampler2D tex;
+layout (location = 2) uniform sampler2D tex;
 
 void main()
 {

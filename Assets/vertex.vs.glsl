@@ -4,8 +4,8 @@ layout (location = 0) in vec3 iv3vertex;
 layout (location = 1) in vec2 iv2tex_coord;
 layout (location = 2) in vec3 iv3normal;
 
-uniform mat4 um4mv;
-uniform mat4 um4p;
+layout (location = 0) uniform mat4 um4mv;
+layout (location = 1) uniform mat4 um4p;
 
 out VertexData
 {

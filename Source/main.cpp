@@ -1,5 +1,8 @@
 #include "../Externals/Include/Common.h"
 
+using namespace glm;
+using namespace std;
+
 #define MENU_TIMER_START 1
 #define MENU_TIMER_STOP 2
 #define MENU_EXIT 3
@@ -10,10 +13,11 @@ unsigned int timer_speed = 16;
 
 const aiScene* scene;
 
-GLuint vao;
+GLuint program;
+const GLint mv_location = 0, proj_location = 1, tex_location = 2;
 
-using namespace glm;
-using namespace std;
+mat4 projection, view, model;
+vec3 eye(0, 0, 5), view_direction(0, 0, -1);
 
 struct Vertex
 {
@@ -31,11 +35,11 @@ struct Shape
     vector<Vertex> vertices;
     vector<unsigned int> indices;
 
-    int drawCount;
-    int materialID;
+    unsigned int draw_count;
+    unsigned int material_id;
 
     Shape(): vao(0), vbo(0), ibo(0),
-             drawCount(0), materialID(0) {}
+             draw_count(0), material_id(0) {}
 
     void extractMeshData(const aiMesh* mesh);
     void extractMeshIndices(const aiMesh* mesh);
@@ -77,8 +81,8 @@ void Shape::bindBuffers()
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * vertices.size(), vertices.data(), GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tex_coords));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tex_coords));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -142,14 +146,14 @@ void loadGeometry()
     {
         const aiMesh* mesh = scene->mMeshes[i];
         Shape shape;
-        
+
         shape.extractMeshData(mesh);
         shape.extractMeshIndices(mesh);
 
         shape.bindBuffers();
 
-        shape.materialID = mesh->mMaterialIndex;
-        shape.drawCount = mesh->mNumFaces * 3;
+        shape.material_id = mesh->mMaterialIndex;
+        shape.draw_count = mesh->mNumFaces * 3;
 
         shapes.push_back(shape);
     }
@@ -164,20 +168,35 @@ void loadMaterials()
         aiString texture_path;
         if (ai_material->GetTexture(aiTextureType_DIFFUSE, 0, &texture_path) == aiReturn_SUCCESS)
         {
-            char full_path[64] = "../Objects/";
+            char full_path[64] = "../Objects/sponza/";
             strncat(full_path, texture_path.C_Str(), 50);
-            
+
             texture_data texture = loadImg(full_path);
             material.bindTexture(texture);
         }
-        // else
-        // {
-            // load some default image as default_diffuse_tex
-            // Material.diffuse_tex = default_diffuse_tex;
-        // }
 
         materials.push_back(material);
     }
+}
+
+GLuint importShader(const char* path, GLenum shader_type)
+{
+    GLuint shader = glCreateShader(shader_type);
+    char** shaderSource = loadShaderSource(path);
+    glShaderSource(shader, 1, shaderSource, NULL);
+    freeShaderSource(shaderSource);
+    glCompileShader(shader);
+
+    return shader;
+}
+
+void setModelMatrix()
+{
+    mat4 T(1), R(1), S(1);
+    T = translate(T, vec3(0, -20, -50));
+    R = mat4_cast(quat(vec3(0, radians(-90.0f), 0)));
+    S = scale(S, vec3(0.5));
+    model = T * R * S;
 }
 
 void My_Init()
@@ -187,12 +206,10 @@ void My_Init()
     glDepthFunc(GL_LEQUAL);
 
     scene = aiImportFile(
-        "../Objects/sibenik.obj",
-        aiProcess_GenNormals |
+        "../Objects/sponza/sponza.obj",
         aiProcess_CalcTangentSpace |
         aiProcess_Triangulate |
-        aiProcess_JoinIdenticalVertices |
-        aiProcess_SortByPType
+        aiProcess_JoinIdenticalVertices
     );
 
     cout << "There are " << scene->mNumMeshes << " meshes." << endl;
@@ -202,11 +219,40 @@ void My_Init()
     loadMaterials();
 
     aiReleaseImport(scene);
+
+    GLuint vertexShader = importShader("vertex.vs.glsl", GL_VERTEX_SHADER);
+    GLuint fragmentShader = importShader("fragment.fs.glsl", GL_FRAGMENT_SHADER);
+
+    program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    glUseProgram(program);
+
+    setModelMatrix();
+    view = lookAt(eye, eye + view_direction, vec3(0.0f, 1.0f, 0.0f));
 }
 
 void My_Display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    view = lookAt(eye, eye + view_direction, vec3(0.0f, 1.0f, 0.0f));
+
+    mat4 mv = view * model;
+    glUniformMatrix4fv(mv_location, 1, GL_FALSE, value_ptr(mv));
+    glUniformMatrix4fv(proj_location, 1, GL_FALSE, value_ptr(projection));
+
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(tex_location, 0);
+
+    for (const auto& shape : shapes)
+    {
+        glBindVertexArray(shape.vao);
+        unsigned int material_id = shape.material_id;
+        glBindTexture(GL_TEXTURE_2D, materials[material_id].diffuse_tex);
+        glDrawElements(GL_TRIANGLES, shape.draw_count, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
 
     glutSwapBuffers();
 }
@@ -214,6 +260,8 @@ void My_Display()
 void My_Reshape(int width, int height)
 {
     glViewport(0, 0, width, height);
+    float viewportAspect = (float)width / (float)height;
+    projection = perspective(radians(60.0f), viewportAspect, 0.1f, 2000.0f);
 }
 
 void My_Timer(int val)
@@ -236,7 +284,27 @@ void My_Mouse(int button, int state, int x, int y)
 
 void My_Keyboard(unsigned char key, int x, int y)
 {
-    printf("Key %c is pressed at (%d, %d)\n", key, x, y);
+    switch (key)
+    {
+    case 'w':
+        eye.z -= 1;
+        break;
+    case 's':
+        eye.z += 1;
+        break;
+    case 'a':
+        eye.x -= 1;
+        break;
+    case 'd':
+        eye.x += 1;
+        break;
+    case 'z':
+        eye.y += 1;
+        break;
+    case 'x':
+        eye.y -= 1;
+        break;
+    }
 }
 
 void My_SpecialKeys(int key, int x, int y)
