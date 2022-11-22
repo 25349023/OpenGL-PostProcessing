@@ -17,7 +17,9 @@ GLuint program;
 const GLint mv_location = 0, proj_location = 1, tex_location = 2;
 
 mat4 projection, view, model;
-vec3 eye(0, 0, 5), view_direction(0, 0, -1);
+vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
+
+vec2 drag_start;
 
 struct Vertex
 {
@@ -199,6 +201,11 @@ void setModelMatrix()
     model = T * R * S;
 }
 
+void updateViewMatrix()
+{
+    view = lookAt(eye, eye + view_direction, up);
+}
+
 void My_Init()
 {
     glClearColor(0.0f, 0.6f, 0.0f, 1.0f);
@@ -230,13 +237,13 @@ void My_Init()
     glUseProgram(program);
 
     setModelMatrix();
-    view = lookAt(eye, eye + view_direction, vec3(0.0f, 1.0f, 0.0f));
+    updateViewMatrix();
 }
 
 void My_Display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    view = lookAt(eye, eye + view_direction, vec3(0.0f, 1.0f, 0.0f));
+    updateViewMatrix();
 
     mat4 mv = view * model;
     glUniformMatrix4fv(mv_location, 1, GL_FALSE, value_ptr(mv));
@@ -274,35 +281,52 @@ void My_Mouse(int button, int state, int x, int y)
 {
     if (state == GLUT_DOWN)
     {
-        printf("Mouse %d is pressed at (%d, %d)\n", button, x, y);
+        drag_start = vec2(x, y);
     }
     else if (state == GLUT_UP)
     {
-        printf("Mouse %d is released at (%d, %d)\n", button, x, y);
+        // printf("Mouse %d is released at (%d, %d)\n", button, x, y);
     }
+}
+
+void My_Motion(int x, int y)
+{
+    vec2 change = 0.2f * (drag_start - vec2(x, y));
+    // change.y = -change.y;
+    int sign = (view_direction.z > 0) ? -1 : 1;
+    mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
+    // mat4 R = rotate(mat4(1), change.x, vec3(0, 1, 0));
+    // R = rotate(R, change.y, vec3(1, 0, 0));
+
+    view_direction = (R * vec4(view_direction, 1)).xyz;
+    // up = (R * vec4(up, 1)).xyz;
+    // view_direction.xy += 0.01f * change;
+
+    drag_start = vec2(x, y);
 }
 
 void My_Keyboard(unsigned char key, int x, int y)
 {
+    // [FIXME] translate in eye space
     switch (key)
     {
     case 'w':
-        eye.z -= 1;
+        eye.z -= 5;
         break;
     case 's':
-        eye.z += 1;
+        eye.z += 5;
         break;
     case 'a':
-        eye.x -= 1;
+        eye.x -= 5;
         break;
     case 'd':
-        eye.x += 1;
+        eye.x += 5;
         break;
     case 'z':
-        eye.y += 1;
+        eye.y += 5;
         break;
     case 'x':
-        eye.y -= 1;
+        eye.y -= 5;
         break;
     }
 }
@@ -391,6 +415,7 @@ int main(int argc, char* argv[])
     glutDisplayFunc(My_Display);
     glutReshapeFunc(My_Reshape);
     glutMouseFunc(My_Mouse);
+    glutMotionFunc(My_Motion);
     glutKeyboardFunc(My_Keyboard);
     glutSpecialFunc(My_SpecialKeys);
     glutTimerFunc(timer_speed, My_Timer, 0);
