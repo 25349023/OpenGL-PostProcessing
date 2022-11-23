@@ -3,9 +3,24 @@
 using namespace glm;
 using namespace std;
 
-#define MENU_RESET_POS 1
-#define MENU_SWITCH_RGB_NORMAL 2
-#define MENU_EXIT 3
+
+enum MainMenuEntry
+{
+    MENU_RESET_POS = 1,
+    MENU_SWITCH_RGB_NORMAL,
+    // MENU_POST,
+    MENU_NONE,
+    MENU_IMAGE_ABSTRACTION,
+    MENU_EXIT
+};
+
+
+enum PostProcessing
+{
+    NONE,
+    IMAGE_ABSTRACTION
+};
+
 
 GLubyte timer_cnt = 0;
 bool timer_enabled = true;
@@ -15,8 +30,10 @@ const aiScene* scene;
 
 GLuint program, program2;
 const GLint mv_location = 0, proj_location = 1, tex_location = 2;
-const GLint fbtex_location = 0;
+const GLint fbtex_location = 0, mode_location = 1, wsize_location = 2;
 GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
+
+int post_mode = NONE;
 
 mat4 projection, view, model;
 vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
@@ -353,6 +370,8 @@ void My_Display()
     glUseProgram(program2);
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(fbtex_location, 0);
+    glUniform1i(mode_location, post_mode);
+    glUniform2f(wsize_location, (float)win_size.x, (float)win_size.y);
 
     glBindVertexArray(fvao);
     glBindTexture(GL_TEXTURE_2D, active_ftex);
@@ -466,6 +485,12 @@ void My_Menu(int id)
     case MENU_SWITCH_RGB_NORMAL:
         active_ftex = (active_ftex == fbo_tex) ? normal_tex : fbo_tex;
         break;
+    case MENU_NONE:
+        post_mode = NONE;
+        break;
+    case MENU_IMAGE_ABSTRACTION:
+        post_mode = IMAGE_ABSTRACTION;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -503,17 +528,17 @@ int main(int argc, char* argv[])
 
     // Create a menu and bind it to mouse right button.
     int menu_main = glutCreateMenu(My_Menu);
-    // int menu_timer = glutCreateMenu(My_Menu);
+    int menu_post = glutCreateMenu(My_Menu);
 
     glutSetMenu(menu_main);
-    // glutAddSubMenu("Timer", menu_timer);
     glutAddMenuEntry("Reset Camera Position", MENU_RESET_POS);
     glutAddMenuEntry("Switch Diffuse / Normal", MENU_SWITCH_RGB_NORMAL);
+    glutAddSubMenu("Post Processing", menu_post);
     glutAddMenuEntry("Exit", MENU_EXIT);
 
-    // glutSetMenu(menu_timer);
-    // glutAddMenuEntry("Start", MENU_TIMER_START);
-    // glutAddMenuEntry("Stop", MENU_TIMER_STOP);
+    glutSetMenu(menu_post);
+    glutAddMenuEntry("None", MENU_NONE);
+    glutAddMenuEntry("Image Abstraction", MENU_IMAGE_ABSTRACTION);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
