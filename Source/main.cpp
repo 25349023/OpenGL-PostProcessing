@@ -18,6 +18,7 @@ const GLint mv_location = 0, proj_location = 1, tex_location = 2;
 
 mat4 projection, view, model;
 vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
+vec3 eye_x(-1, 0, 0), eye_y(0, 1, 0), eye_z(0, 0, -1);
 
 vec2 drag_start;
 
@@ -292,15 +293,16 @@ void My_Mouse(int button, int state, int x, int y)
 void My_Motion(int x, int y)
 {
     vec2 change = 0.2f * (drag_start - vec2(x, y));
-    // change.y = -change.y;
+
     int sign = (view_direction.z > 0) ? -1 : 1;
     mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
     // mat4 R = rotate(mat4(1), change.x, vec3(0, 1, 0));
     // R = rotate(R, change.y, vec3(1, 0, 0));
 
     view_direction = (R * vec4(view_direction, 1)).xyz;
-    // up = (R * vec4(up, 1)).xyz;
-    // view_direction.xy += 0.01f * change;
+    eye_z = (R * vec4(eye_z, 1)).xyz;
+    eye_x = normalize(cross(up, eye_z));
+    eye_y = normalize(cross(eye_z, eye_x));
 
     drag_start = vec2(x, y);
 }
@@ -308,25 +310,28 @@ void My_Motion(int x, int y)
 void My_Keyboard(unsigned char key, int x, int y)
 {
     // [FIXME] translate in eye space
+    const float speed = 5.0f;
     switch (key)
     {
     case 'w':
-        eye.z -= 5;
+        eye += speed * eye_z;
         break;
     case 's':
-        eye.z += 5;
+        eye -= speed * eye_z;
         break;
     case 'a':
-        eye.x -= 5;
+        eye += speed * eye_x;
         break;
     case 'd':
-        eye.x += 5;
+        eye -= speed * eye_x;
         break;
     case 'z':
-        eye.y += 5;
+        eye += speed * eye_y;
         break;
     case 'x':
-        eye.y -= 5;
+        eye -= speed * eye_y;
+        break;
+    default:
         break;
     }
 }
