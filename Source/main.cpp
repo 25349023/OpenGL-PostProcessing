@@ -13,14 +13,17 @@ unsigned int timer_speed = 16;
 
 const aiScene* scene;
 
-GLuint program;
+GLuint program, program2;
 const GLint mv_location = 0, proj_location = 1, tex_location = 2;
+const GLint fbtex_location = 0;
+GLuint fvao, window_vbo, fbo, fbo_tex, depthrbo;
 
 mat4 projection, view, model;
 vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
 vec3 eye_x(-1, 0, 0), eye_y(0, 1, 0), eye_z(0, 0, -1);
 
-vec2 drag_start;
+vec2 last_drag;
+ivec2 win_size(600, 600);
 
 struct Vertex
 {
@@ -189,8 +192,22 @@ GLuint importShader(const char* path, GLenum shader_type)
     glShaderSource(shader, 1, shaderSource, NULL);
     freeShaderSource(shaderSource);
     glCompileShader(shader);
+    shaderLog(shader);
 
     return shader;
+}
+
+GLuint compileProgram(const char* vs_path, const char* fs_path)
+{
+    GLuint vertexShader = importShader(vs_path, GL_VERTEX_SHADER);
+    GLuint fragmentShader = importShader(fs_path, GL_FRAGMENT_SHADER);
+
+    GLuint pg = glCreateProgram();
+    glAttachShader(pg, vertexShader);
+    glAttachShader(pg, fragmentShader);
+    glLinkProgram(pg);
+
+    return pg;
 }
 
 void setModelMatrix()
@@ -207,6 +224,58 @@ void updateViewMatrix()
     view = lookAt(eye, eye + view_direction, up);
 }
 
+void setupFrameBuffer()
+{
+    // vao for framebuffer shader
+    glGenVertexArrays(1, &fvao);
+    glBindVertexArray(fvao);
+
+    const float window_vertex[] =
+    {
+        //vec2 position vec2 texture_coord
+        1.0f, -1.0f, 1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f
+    };
+
+    glGenBuffers(1, &window_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, window_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(window_vertex), window_vertex, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    // setup framebuffer
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    
+    // Create fboDataTexture
+    glGenTextures(1, &fbo_tex);
+    glBindTexture(GL_TEXTURE_2D, fbo_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 win_size.x, win_size.y, 0, GL_RGBA,GL_UNSIGNED_BYTE, NULL);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0);
+    
+    // Create Depth RBO
+    glGenRenderbuffers(1, &depthrbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthrbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32, win_size.x, win_size.y);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrbo);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindVertexArray(0);
+}
+
 void My_Init()
 {
     glClearColor(0.0f, 0.6f, 0.0f, 1.0f);
@@ -217,6 +286,7 @@ void My_Init()
         "../Objects/sponza/sponza.obj",
         aiProcess_CalcTangentSpace |
         aiProcess_Triangulate |
+        aiProcess_GenNormals |
         aiProcess_JoinIdenticalVertices
     );
 
@@ -228,21 +298,22 @@ void My_Init()
 
     aiReleaseImport(scene);
 
-    GLuint vertexShader = importShader("vertex.vs.glsl", GL_VERTEX_SHADER);
-    GLuint fragmentShader = importShader("fragment.fs.glsl", GL_FRAGMENT_SHADER);
-
-    program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
+    program = compileProgram("vertex.vs.glsl", "fragment.fs.glsl");
+    program2 = compileProgram("framebuf.vs.glsl", "framebuf.fs.glsl");
     glUseProgram(program);
 
     setModelMatrix();
     updateViewMatrix();
+
+    setupFrameBuffer();
 }
 
 void My_Display()
 {
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+    glUseProgram(program);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     updateViewMatrix();
 
@@ -262,12 +333,26 @@ void My_Display()
         glBindVertexArray(0);
     }
 
+    // switch to screen framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    glUseProgram(program2);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(fbtex_location, 0);
+    
+    glBindVertexArray(fvao);
+    glBindTexture(GL_TEXTURE_2D, fbo_tex);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glBindVertexArray(0);
+
     glutSwapBuffers();
 }
 
 void My_Reshape(int width, int height)
 {
     glViewport(0, 0, width, height);
+    win_size = vec2(width, height);
     float viewportAspect = (float)width / (float)height;
     projection = perspective(radians(60.0f), viewportAspect, 0.1f, 2000.0f);
 }
@@ -282,7 +367,7 @@ void My_Mouse(int button, int state, int x, int y)
 {
     if (state == GLUT_DOWN)
     {
-        drag_start = vec2(x, y);
+        last_drag = vec2(x, y);
     }
     else if (state == GLUT_UP)
     {
@@ -292,7 +377,7 @@ void My_Mouse(int button, int state, int x, int y)
 
 void My_Motion(int x, int y)
 {
-    vec2 change = 0.2f * (drag_start - vec2(x, y));
+    vec2 change = 0.2f * (last_drag - vec2(x, y));
 
     int sign = (view_direction.z > 0) ? -1 : 1;
     mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
@@ -302,7 +387,7 @@ void My_Motion(int x, int y)
     eye_x = normalize(cross(up, eye_z));
     eye_y = normalize(cross(eye_z, eye_x));
 
-    drag_start = vec2(x, y);
+    last_drag = vec2(x, y);
 }
 
 void My_Keyboard(unsigned char key, int x, int y)
@@ -386,6 +471,9 @@ int main(int argc, char* argv[])
 #else
     glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
 #endif
+    // for RenderDoc debugging
+    // glutInitContextVersion(4, 6);
+    // glutInitContextProfile(GLUT_CORE_PROFILE);
     glutInitWindowPosition(100, 100);
     glutInitWindowSize(600, 600);
     glutCreateWindow("111062566_AS2");
