@@ -4,7 +4,7 @@ using namespace glm;
 using namespace std;
 
 #define MENU_RESET_POS 1
-// #define MENU_TIMER_STOP 2
+#define MENU_SWITCH_RGB_NORMAL 2
 #define MENU_EXIT 3
 
 GLubyte timer_cnt = 0;
@@ -16,7 +16,7 @@ const aiScene* scene;
 GLuint program, program2;
 const GLint mv_location = 0, proj_location = 1, tex_location = 2;
 const GLint fbtex_location = 0;
-GLuint fvao, window_vbo, fbo, fbo_tex, depthrbo;
+GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
 
 mat4 projection, view, model;
 vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
@@ -224,6 +224,21 @@ void updateViewMatrix()
     view = lookAt(eye, eye + view_direction, up);
 }
 
+void genFramebufferTexture(GLuint& tex, int attachment)
+{
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 win_size.x, win_size.y, 0, GL_RGBA,GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachment, GL_TEXTURE_2D, tex, 0);
+}
+
 void setupFrameBuffer()
 {
     // vao for framebuffer shader
@@ -252,33 +267,25 @@ void setupFrameBuffer()
     // setup framebuffer
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    
+
     // Create fboDataTexture
-    glGenTextures(1, &fbo_tex);
-    glBindTexture(GL_TEXTURE_2D, fbo_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 win_size.x, win_size.y, 0, GL_RGBA,GL_UNSIGNED_BYTE, NULL);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0);
-    
+    genFramebufferTexture(fbo_tex, 0);
+    genFramebufferTexture(normal_tex, 1);
+    active_ftex = fbo_tex;
+
     // Create Depth RBO
     glGenRenderbuffers(1, &depthrbo);
     glBindRenderbuffer(GL_RENDERBUFFER, depthrbo);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32, win_size.x, win_size.y);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrbo);
-    
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindVertexArray(0);
 }
 
 void My_Init()
 {
-    glClearColor(0.0f, 0.6f, 0.0f, 1.0f);
+    glClearColor(0.8f, 0.9f, 1.0f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
 
@@ -310,8 +317,14 @@ void My_Init()
 
 void My_Display()
 {
+    const GLenum draw_buffers[] =
+    {
+        GL_COLOR_ATTACHMENT0,
+        GL_COLOR_ATTACHMENT1
+    };
+
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffers(2, draw_buffers);
 
     glUseProgram(program);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -334,15 +347,15 @@ void My_Display()
     }
 
     // switch to screen framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    
+
     glUseProgram(program2);
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(fbtex_location, 0);
-    
+
     glBindVertexArray(fvao);
-    glBindTexture(GL_TEXTURE_2D, fbo_tex);
+    glBindTexture(GL_TEXTURE_2D, active_ftex);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     glBindVertexArray(0);
 
@@ -449,6 +462,9 @@ void My_Menu(int id)
         eye_y = vec3(0, 1, 0);
         eye_z = vec3(0, 0, -1);
         break;
+    case MENU_SWITCH_RGB_NORMAL:
+        active_ftex = (active_ftex == fbo_tex) ? normal_tex : fbo_tex;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -486,11 +502,12 @@ int main(int argc, char* argv[])
 
     // Create a menu and bind it to mouse right button.
     int menu_main = glutCreateMenu(My_Menu);
-    int menu_timer = glutCreateMenu(My_Menu);
+    // int menu_timer = glutCreateMenu(My_Menu);
 
     glutSetMenu(menu_main);
     // glutAddSubMenu("Timer", menu_timer);
     glutAddMenuEntry("Reset Camera Position", MENU_RESET_POS);
+    glutAddMenuEntry("Switch Diffuse / Normal", MENU_SWITCH_RGB_NORMAL);
     glutAddMenuEntry("Exit", MENU_EXIT);
 
     // glutSetMenu(menu_timer);
