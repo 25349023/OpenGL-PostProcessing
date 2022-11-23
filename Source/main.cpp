@@ -368,6 +368,7 @@ void My_Reshape(int width, int height)
     win_size = vec2(width, height);
     float viewportAspect = (float)width / (float)height;
     projection = perspective(radians(60.0f), viewportAspect, 0.1f, 2000.0f);
+    setupFrameBuffer();
 }
 
 void My_Timer(int val)
