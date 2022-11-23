@@ -3,8 +3,8 @@
 using namespace glm;
 using namespace std;
 
-#define MENU_TIMER_START 1
-#define MENU_TIMER_STOP 2
+#define MENU_RESET_POS 1
+// #define MENU_TIMER_STOP 2
 #define MENU_EXIT 3
 
 GLubyte timer_cnt = 0;
@@ -296,8 +296,6 @@ void My_Motion(int x, int y)
 
     int sign = (view_direction.z > 0) ? -1 : 1;
     mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
-    // mat4 R = rotate(mat4(1), change.x, vec3(0, 1, 0));
-    // R = rotate(R, change.y, vec3(1, 0, 0));
 
     view_direction = (R * vec4(view_direction, 1)).xyz;
     eye_z = (R * vec4(eye_z, 1)).xyz;
@@ -309,7 +307,6 @@ void My_Motion(int x, int y)
 
 void My_Keyboard(unsigned char key, int x, int y)
 {
-    // [FIXME] translate in eye space
     const float speed = 5.0f;
     switch (key)
     {
@@ -359,15 +356,13 @@ void My_Menu(int id)
 {
     switch (id)
     {
-    case MENU_TIMER_START:
-        if (!timer_enabled)
-        {
-            timer_enabled = true;
-            glutTimerFunc(timer_speed, My_Timer, 0);
-        }
-        break;
-    case MENU_TIMER_STOP:
-        timer_enabled = false;
+    case MENU_RESET_POS:
+        eye = vec3(0, 0, 5);
+        view_direction = vec3(0, 0, -1);
+        up = vec3(0, 1, 0);
+        eye_x = vec3(-1, 0, 0);
+        eye_y = vec3(0, 1, 0);
+        eye_z = vec3(0, 0, -1);
         break;
     case MENU_EXIT:
         exit(0);
@@ -406,12 +401,13 @@ int main(int argc, char* argv[])
     int menu_timer = glutCreateMenu(My_Menu);
 
     glutSetMenu(menu_main);
-    glutAddSubMenu("Timer", menu_timer);
+    // glutAddSubMenu("Timer", menu_timer);
+    glutAddMenuEntry("Reset Camera Position", MENU_RESET_POS);
     glutAddMenuEntry("Exit", MENU_EXIT);
 
-    glutSetMenu(menu_timer);
-    glutAddMenuEntry("Start", MENU_TIMER_START);
-    glutAddMenuEntry("Stop", MENU_TIMER_STOP);
+    // glutSetMenu(menu_timer);
+    // glutAddMenuEntry("Start", MENU_TIMER_START);
+    // glutAddMenuEntry("Stop", MENU_TIMER_STOP);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
