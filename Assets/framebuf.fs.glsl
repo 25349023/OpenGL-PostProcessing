@@ -83,8 +83,7 @@ vec4 diff_of_gaussian() {
     return vec4(edge, edge, edge, 1.0);
 }
 
-vec4 median_blur(vec2 uv) {
-    int half_size = 2;
+vec4 median_blur(vec2 uv, int half_size) {
     vec4 color_sum = vec4(0);
     for (int i = -half_size; i <= half_size; ++i)
     {
@@ -106,14 +105,14 @@ vec4 quantization(vec4 color) {
 }
 
 vec4 image_abstraction() {
-    vec4 blurred = median_blur(gl_FragCoord.xy);
+    vec4 blurred = median_blur(gl_FragCoord.xy, 2);
     return quantization(blurred) * diff_of_gaussian();
 }
 
 vec4 watercolor() {
     vec4 noise_color = texture(noise_tex, fs_in.texcoord);
     vec2 distorted_uv = gl_FragCoord.xy + (noise_color.xy) * 8;
-    vec4 blurred = median_blur(distorted_uv);
+    vec4 blurred = median_blur(distorted_uv, 2);
     return quantization(blurred);
 }
 
@@ -133,6 +132,12 @@ vec4 magnifier() {
     }
 }
 
+vec4 bloom() {
+    vec4 first_pass = median_blur(gl_FragCoord.xy, 2);
+    vec4 second_pass = median_blur(gl_FragCoord.xy, 5);
+    return texture(tex, fs_in.texcoord) + first_pass * 0.15 + second_pass * 0.35;
+}
+
 void main(void) {
     if (mode > 0) {
         switch (mode) {
@@ -144,6 +149,9 @@ void main(void) {
                 break;
             case 3:
                 fragColor = magnifier();
+                break;
+            case 4:
+                fragColor = bloom();
                 break;
         }
 
