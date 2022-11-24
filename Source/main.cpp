@@ -265,6 +265,7 @@ void updateViewMatrix()
     view = lookAt(eye, eye + view_direction, up);
 }
 
+// Simplex Noise
 struct Noise3
 {
     static int i, j, k;
@@ -635,25 +636,6 @@ void My_Keyboard(unsigned char key, int x, int y)
     }
 }
 
-void My_SpecialKeys(int key, int x, int y)
-{
-    switch (key)
-    {
-    case GLUT_KEY_F1:
-        printf("F1 is pressed at (%d, %d)\n", x, y);
-        break;
-    case GLUT_KEY_PAGE_UP:
-        printf("Page up is pressed at (%d, %d)\n", x, y);
-        break;
-    case GLUT_KEY_LEFT:
-        printf("Left arrow is pressed at (%d, %d)\n", x, y);
-        break;
-    default:
-        printf("Other special key is pressed at (%d, %d)\n", x, y);
-        break;
-    }
-}
-
 void My_Menu(int id)
 {
     switch (id)
@@ -754,7 +736,6 @@ int main(int argc, char* argv[])
     glutMotionFunc(My_Motion);
     glutPassiveMotionFunc(My_PassiveMotion);
     glutKeyboardFunc(My_Keyboard);
-    glutSpecialFunc(My_SpecialKeys);
     glutTimerFunc(timer_speed, My_Timer, 0);
 
     // Enter main event loop.

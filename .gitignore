@@ -1,7 +1,9 @@
 *.pptx
 *.db
+*.exe
 
 .idea/
+.vs/
 Debug/
 Release/
 Externals/
