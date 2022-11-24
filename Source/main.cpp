@@ -11,16 +11,16 @@ enum MainMenuEntry
     // MENU_POST,
     MENU_NONE,
     MENU_IMAGE_ABSTRACTION,
+    MENU_WATERCOLOR,
     MENU_EXIT
 };
-
 
 enum PostProcessing
 {
     POST_NONE,
-    POST_IMAGE_ABSTRACTION
+    POST_IMAGE_ABSTRACTION,
+    POST_WATERCOLOR
 };
-
 
 enum DragMode
 {
@@ -37,8 +37,12 @@ const aiScene* scene;
 
 GLuint program, program2;
 const GLint mv_loc = 0, proj_loc = 1, tex_loc = 2;
-const GLint fbtex_loc = 0, mode_loc = 1, wsize_loc = 2, cbar_loc = 3;
+const GLint fbtex_loc = 0, mode_loc = 1, wsize_loc = 2, cbar_loc = 3, ntex_loc = 4;
 GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
+
+const int noise_size = 600;
+float noise_map[noise_size][noise_size][3]{};
+GLuint noise_tex;
 
 int post_mode = POST_NONE;
 
@@ -252,6 +256,96 @@ void updateViewMatrix()
     view = lookAt(eye, eye + view_direction, up);
 }
 
+struct Noise3
+{
+    static int i, j, k;
+    static int A[3], T[8];
+
+    static float u, v, w;
+
+    static float noise(float x, float y, float z)
+    {
+        float s = (x + y + z) / 3;
+        i = (int)floor(x + s);
+        j = (int)floor(y + s);
+        k = (int)floor(z + s);
+        s = (i + j + k) / 6.;
+        u = x - i + s;
+        v = y - j + s;
+        w = z - k + s;
+        A[0] = A[1] = A[2] = 0;
+        int hi = u >= w ? u >= v ? 0 : 1 : v >= w ? 1 : 2;
+        int lo = u < w ? u < v ? 0 : 1 : v < w ? 1 : 2;
+        return kernel(hi) + kernel(3 - hi - lo) + kernel(lo) + kernel(0);
+    }
+
+    static float kernel(int a)
+    {
+        float s = (A[0] + A[1] + A[2]) / 6.;
+        float x = u - A[0] + s, y = v - A[1] + s, z = w - A[2] + s,
+              t = .6f - x * x - y * y - z * z;
+        int h = shuffle(i + A[0], j + A[1], k + A[2]);
+        A[a]++;
+        if (t < 0)
+            return 0;
+        int b5 = h >> 5 & 1, b4 = h >> 4 & 1, b3 = h >> 3 & 1, b2 = h >> 2 & 1, b = h & 3;
+        float p = b == 1 ? x : b == 2 ? y : z,
+              q = b == 1 ? y : b == 2 ? z : x,
+              r = b == 1 ? z : b == 2 ? x : y;
+        p = (b5 == b3 ? -p : p);
+        q = (b5 == b4 ? -q : q);
+        r = (b5 != (b4 ^ b3) ? -r : r);
+        t *= t;
+        return 8 * t * t * (p + (b == 0 ? q + r : b2 == 0 ? q : r));
+    }
+
+    static int shuffle(int i, int j, int k)
+    {
+        return b(i, j, k, 0) + b(j, k, i, 1) + b(k, i, j, 2) + b(i, j, k, 3) +
+            b(j, k, i, 4) + b(k, i, j, 5) + b(i, j, k, 6) + b(j, k, i, 7);
+    }
+
+    static int b(int i, int j, int k, int B)
+    {
+        return T[b(i, B) << 2 | b(j, B) << 1 | b(k, B)];
+    }
+
+    static int b(int N, int B)
+    {
+        return N >> B & 1;
+    }
+};
+
+int Noise3::i, Noise3::j, Noise3::k;
+float Noise3::u, Noise3::v, Noise3::w;
+int Noise3::A[3] = {0, 0, 0};
+int Noise3::T[8] = {0x15, 0x38, 0x32, 0x2c, 0x0d, 0x13, 0x07, 0x2a};
+
+void setupNoiseTexture()
+{
+    for (int i = 0; i < noise_size; i++)
+    {
+        for (int j = 0; j < noise_size; ++j)
+        {
+            for (int k = 0; k < 3; ++k)
+            {
+                noise_map[i][j][k] = Noise3::noise(i / 10.0f, j / 10.0f, k);
+            }
+        }
+    }
+
+    glGenTextures(1, &noise_tex);
+    glBindTexture(GL_TEXTURE_2D, noise_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, noise_size, noise_size, 0,
+                 GL_RGB, GL_FLOAT, noise_map);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
+
 void genFramebufferTexture(GLuint& tex, int attachment)
 {
     glGenTextures(1, &tex);
@@ -340,6 +434,7 @@ void My_Init()
     setModelMatrix();
     updateViewMatrix();
 
+    setupNoiseTexture();
     setupFrameBuffer();
 }
 
@@ -379,14 +474,17 @@ void My_Display()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(program2);
-    glActiveTexture(GL_TEXTURE0);
     glUniform1i(fbtex_loc, 0);
+    glUniform1i(ntex_loc, 1);
     glUniform1i(mode_loc, post_mode);
     glUniform2f(wsize_loc, (float)win_size.x, (float)win_size.y);
     glUniform1i(cbar_loc, comparison_bar);
 
     glBindVertexArray(fvao);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, active_ftex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, noise_tex);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     glBindVertexArray(0);
 
@@ -529,6 +627,9 @@ void My_Menu(int id)
     case MENU_IMAGE_ABSTRACTION:
         post_mode = POST_IMAGE_ABSTRACTION;
         break;
+    case MENU_WATERCOLOR:
+        post_mode = POST_WATERCOLOR;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -577,6 +678,7 @@ int main(int argc, char* argv[])
     glutSetMenu(menu_post);
     glutAddMenuEntry("None", MENU_NONE);
     glutAddMenuEntry("Image Abstraction", MENU_IMAGE_ABSTRACTION);
+    glutAddMenuEntry("Watercolor", MENU_WATERCOLOR);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
