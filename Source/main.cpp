@@ -8,12 +8,12 @@ enum MainMenuEntry
 {
     MENU_RESET_POS = 1,
     MENU_SWITCH_RGB_NORMAL,
-    // MENU_POST,
     MENU_NONE,
     MENU_IMAGE_ABSTRACTION,
     MENU_WATERCOLOR,
     MENU_MAGNIFIER,
     MENU_BLOOM,
+    MENU_PIXELIZATION,
     MENU_EXIT
 };
 
@@ -23,7 +23,8 @@ enum PostProcessing
     POST_IMAGE_ABSTRACTION,
     POST_WATERCOLOR,
     POST_MAGNIFIER,
-    POST_BLOOM
+    POST_BLOOM,
+    POST_PIXELIZATION
 };
 
 enum DragMode
@@ -679,6 +680,9 @@ void My_Menu(int id)
     case MENU_BLOOM:
         post_mode = POST_BLOOM;
         break;
+    case MENU_PIXELIZATION:
+        post_mode = POST_PIXELIZATION;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -730,6 +734,7 @@ int main(int argc, char* argv[])
     glutAddMenuEntry("Watercolor", MENU_WATERCOLOR);
     glutAddMenuEntry("Magnifier", MENU_MAGNIFIER);
     glutAddMenuEntry("Bloom", MENU_BLOOM);
+    glutAddMenuEntry("Pixelization", MENU_PIXELIZATION);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);

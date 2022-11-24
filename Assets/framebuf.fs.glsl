@@ -138,6 +138,20 @@ vec4 bloom() {
     return texture(tex, fs_in.texcoord) + first_pass * 0.15 + second_pass * 0.35;
 }
 
+vec4 pixelization() {
+    int pixel_size = 10;
+    ivec2 base = ivec2(gl_FragCoord.xy / pixel_size) * pixel_size;
+    vec4 color;
+    for (int i = 0; i < pixel_size; i++) {
+        for (int j = 0; j < pixel_size; j++) {
+            ivec2 coord = base + ivec2(i, j);
+            color += texelFetch(tex, coord, 0);
+        }
+    }
+    color /= pixel_size * pixel_size;
+    return color;
+}
+
 void main(void) {
     if (mode > 0) {
         switch (mode) {
@@ -152,6 +166,9 @@ void main(void) {
                 break;
             case 4:
                 fragColor = bloom();
+                break;
+            case 5:
+                fragColor = pixelization();
                 break;
         }
 
