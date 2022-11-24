@@ -14,6 +14,7 @@ enum MainMenuEntry
     MENU_MAGNIFIER,
     MENU_BLOOM,
     MENU_PIXELIZATION,
+    MENU_SINWAVE,
     MENU_EXIT
 };
 
@@ -24,7 +25,8 @@ enum PostProcessing
     POST_WATERCOLOR,
     POST_MAGNIFIER,
     POST_BLOOM,
-    POST_PIXELIZATION
+    POST_PIXELIZATION,
+    POST_SINWAVE
 };
 
 enum DragMode
@@ -34,7 +36,7 @@ enum DragMode
     DRAG_COMP_BAR
 };
 
-GLubyte timer_cnt = 0;
+GLuint timer_cnt = 0;
 bool timer_enabled = true;
 unsigned int timer_speed = 16;
 
@@ -43,7 +45,7 @@ const aiScene* scene;
 GLuint program, program2;
 const GLint mv_loc = 0, proj_loc = 1, tex_loc = 2;
 const GLint fbtex_loc = 0, mode_loc = 1, wsize_loc = 2, cbar_loc = 3, ntex_loc = 4;
-const GLint magc_loc = 5;
+const GLint magc_loc = 5, time_loc = 6;
 GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
 
 const int noise_size = 600;
@@ -487,6 +489,7 @@ void My_Display()
     glUniform2f(wsize_loc, (float)win_size.x, (float)win_size.y);
     glUniform1i(cbar_loc, comparison_bar);
     glUniform3fv(magc_loc, 1, value_ptr(magnifier));
+    glUniform1i(time_loc, timer_cnt);
 
     glBindVertexArray(fvao);
     glActiveTexture(GL_TEXTURE0);
@@ -513,6 +516,7 @@ void My_Reshape(int width, int height)
 void My_Timer(int val)
 {
     glutPostRedisplay();
+    timer_cnt = (timer_cnt + 1) % 360;
     glutTimerFunc(timer_speed, My_Timer, val);
 }
 
@@ -683,6 +687,9 @@ void My_Menu(int id)
     case MENU_PIXELIZATION:
         post_mode = POST_PIXELIZATION;
         break;
+    case MENU_SINWAVE:
+        post_mode = POST_SINWAVE;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -724,7 +731,7 @@ int main(int argc, char* argv[])
 
     glutSetMenu(menu_main);
     glutAddMenuEntry("Reset Camera Position", MENU_RESET_POS);
-    glutAddMenuEntry("Switch Diffuse / Normal", MENU_SWITCH_RGB_NORMAL);
+    glutAddMenuEntry("Switch Texture / Normal", MENU_SWITCH_RGB_NORMAL);
     glutAddSubMenu("Post Processing", menu_post);
     glutAddMenuEntry("Exit", MENU_EXIT);
 
@@ -735,6 +742,7 @@ int main(int argc, char* argv[])
     glutAddMenuEntry("Magnifier", MENU_MAGNIFIER);
     glutAddMenuEntry("Bloom", MENU_BLOOM);
     glutAddMenuEntry("Pixelization", MENU_PIXELIZATION);
+    glutAddMenuEntry("Sinwave", MENU_SINWAVE);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);

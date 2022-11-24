@@ -6,6 +6,7 @@ layout (location = 2) uniform vec2 win_size;
 layout (location = 3) uniform int comp_bar;
 layout (location = 4) uniform sampler2D noise_tex;
 layout (location = 5) uniform vec3 mag_coord; // x, y, r
+layout (location = 6) uniform int time;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -152,6 +153,12 @@ vec4 pixelization() {
     return color;
 }
 
+vec4 sinwave() {
+    vec2 coord = fs_in.texcoord;
+    coord.x += 0.05 * sin(fs_in.texcoord.y * 3 * 3.14159 + radians(float(time * 2)));
+    return texture(tex, coord);
+}
+
 void main(void) {
     if (mode > 0) {
         switch (mode) {
@@ -169,6 +176,9 @@ void main(void) {
                 break;
             case 5:
                 fragColor = pixelization();
+                break;
+            case 6:
+                fragColor = sinwave();
                 break;
         }
 
