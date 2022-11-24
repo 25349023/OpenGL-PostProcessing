@@ -12,6 +12,7 @@ enum MainMenuEntry
     MENU_NONE,
     MENU_IMAGE_ABSTRACTION,
     MENU_WATERCOLOR,
+    MENU_MAGNIFIER,
     MENU_EXIT
 };
 
@@ -19,7 +20,8 @@ enum PostProcessing
 {
     POST_NONE,
     POST_IMAGE_ABSTRACTION,
-    POST_WATERCOLOR
+    POST_WATERCOLOR,
+    POST_MAGNIFIER
 };
 
 enum DragMode
@@ -38,6 +40,7 @@ const aiScene* scene;
 GLuint program, program2;
 const GLint mv_loc = 0, proj_loc = 1, tex_loc = 2;
 const GLint fbtex_loc = 0, mode_loc = 1, wsize_loc = 2, cbar_loc = 3, ntex_loc = 4;
+const GLint magc_loc = 5;
 GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
 
 const int noise_size = 600;
@@ -53,9 +56,10 @@ vec3 eye_x(-1, 0, 0), eye_y(0, 1, 0), eye_z(0, 0, -1);
 int drag_mode;
 ivec2 last_drag;
 
-
 ivec2 win_size(600, 600);
 int comparison_bar = 300;
+
+vec3 magnifier(win_size / 2, 100);
 
 struct Vertex
 {
@@ -479,6 +483,7 @@ void My_Display()
     glUniform1i(mode_loc, post_mode);
     glUniform2f(wsize_loc, (float)win_size.x, (float)win_size.y);
     glUniform1i(cbar_loc, comparison_bar);
+    glUniform3fv(magc_loc, 1, value_ptr(magnifier));
 
     glBindVertexArray(fvao);
     glActiveTexture(GL_TEXTURE0);
@@ -508,11 +513,17 @@ void My_Timer(int val)
     glutTimerFunc(timer_speed, My_Timer, val);
 }
 
+bool closeToComparisonBar(int x)
+{
+    return comparison_bar - 10 < x && x < comparison_bar + 10
+        && post_mode != POST_NONE && post_mode != POST_MAGNIFIER;
+}
+
 void My_Mouse(int button, int state, int x, int y)
 {
     if (state == GLUT_DOWN)
     {
-        if (comparison_bar - 10 < x && x < comparison_bar + 10 && post_mode != POST_NONE)
+        if (closeToComparisonBar(x))
         {
             drag_mode = DRAG_COMP_BAR;
         }
@@ -521,6 +532,15 @@ void My_Mouse(int button, int state, int x, int y)
             drag_mode = DRAG_CAMERA_EYE;
         }
         last_drag = vec2(x, y);
+
+        if (button == 3)
+        {
+            magnifier.z += 4;
+        }
+        else if (button == 4)
+        {
+            magnifier.z -= 4;
+        }
     }
     else if (state == GLUT_UP)
     {
@@ -547,6 +567,11 @@ void My_Motion(int x, int y)
             eye_y = normalize(cross(eye_z, eye_x));
 
             last_drag = vec2(x, y);
+
+            if (post_mode == POST_MAGNIFIER)
+            {
+                magnifier.xy = vec2(x, win_size.y - y);
+            }
             break;
         }
     case DRAG_COMP_BAR:
@@ -556,6 +581,22 @@ void My_Motion(int x, int y)
         break;
     default:
         break;
+    }
+}
+
+void My_PassiveMotion(int x, int y)
+{
+    if (closeToComparisonBar(x))
+    {
+        glutSetCursor(GLUT_CURSOR_LEFT_RIGHT);
+    }
+    else
+    {
+        glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
+    }
+    if (post_mode == POST_MAGNIFIER)
+    {
+        magnifier.xy = vec2(x, win_size.y - y);
     }
 }
 
@@ -630,6 +671,9 @@ void My_Menu(int id)
     case MENU_WATERCOLOR:
         post_mode = POST_WATERCOLOR;
         break;
+    case MENU_MAGNIFIER:
+        post_mode = POST_MAGNIFIER;
+        break;
     case MENU_EXIT:
         exit(0);
         break;
@@ -679,6 +723,7 @@ int main(int argc, char* argv[])
     glutAddMenuEntry("None", MENU_NONE);
     glutAddMenuEntry("Image Abstraction", MENU_IMAGE_ABSTRACTION);
     glutAddMenuEntry("Watercolor", MENU_WATERCOLOR);
+    glutAddMenuEntry("Magnifier", MENU_MAGNIFIER);
 
     glutSetMenu(menu_main);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
@@ -688,6 +733,7 @@ int main(int argc, char* argv[])
     glutReshapeFunc(My_Reshape);
     glutMouseFunc(My_Mouse);
     glutMotionFunc(My_Motion);
+    glutPassiveMotionFunc(My_PassiveMotion);
     glutKeyboardFunc(My_Keyboard);
     glutSpecialFunc(My_SpecialKeys);
     glutTimerFunc(timer_speed, My_Timer, 0);

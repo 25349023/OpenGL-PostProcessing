@@ -5,6 +5,7 @@ layout (location = 1) uniform int mode;
 layout (location = 2) uniform vec2 win_size;
 layout (location = 3) uniform int comp_bar;
 layout (location = 4) uniform sampler2D noise_tex;
+layout (location = 5) uniform vec3 mag_coord; // x, y, r
 
 layout (location = 0) out vec4 fragColor;
 
@@ -116,8 +117,24 @@ vec4 watercolor() {
     return quantization(blurred);
 }
 
+vec4 magnifier() {
+    float radius = mag_coord.z;
+    float dist = distance(gl_FragCoord.xy, mag_coord.xy);
+    if (dist > radius + 1) {
+        return texture(tex, fs_in.texcoord);
+    } else if (radius - 1 <= dist && dist <= radius + 1) {
+        return vec4(1.0);
+    } else {
+        vec2 shift = mag_coord.xy / win_size;
+        vec2 coord = fs_in.texcoord - shift;
+        coord /= 2;
+        coord += shift;
+        return texture(tex, coord);
+    }
+}
+
 void main(void) {
-    if (mode > 0 && gl_FragCoord.x < comp_bar + 1) {
+    if (mode > 0) {
         switch (mode) {
             case 1:
                 fragColor = image_abstraction();
@@ -125,8 +142,17 @@ void main(void) {
             case 2:
                 fragColor = watercolor();
                 break;
+            case 3:
+                fragColor = magnifier();
+                break;
         }
-        draw_comparison_bar();
+
+        if (mode != 3) {
+            draw_comparison_bar();
+            if (gl_FragCoord.x >= comp_bar + 1) {
+                fragColor = texture(tex, fs_in.texcoord);
+            }
+        }
     } else {
         fragColor = texture(tex, fs_in.texcoord);
     }
