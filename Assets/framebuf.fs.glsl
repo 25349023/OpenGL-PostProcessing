@@ -3,6 +3,7 @@
 layout (location = 0) uniform sampler2D tex;
 layout (location = 1) uniform int mode;
 layout (location = 2) uniform vec2 win_size;
+layout (location = 3) uniform int comp_bar;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -11,6 +12,12 @@ in VS_OUT
     vec2 texcoord;
 } fs_in;
 
+
+void draw_comparison_bar() {
+    if (gl_FragCoord.x > comp_bar - 1 && gl_FragCoord.x < comp_bar + 1) {
+        fragColor = vec4(1.0);
+    }
+}
 
 vec4 diff_of_gaussian() {
     float sigma_e = 2.0f;
@@ -67,12 +74,15 @@ vec4 image_abstraction() {
 }
 
 void main(void) {
-    switch (mode) {
-        case 0:
-            fragColor = texture(tex, fs_in.texcoord);
-            break;
-        case 1:
-            fragColor = image_abstraction();
-            break;
+    if (mode > 0 && gl_FragCoord.x < comp_bar + 1) {
+        switch (mode) {
+            case 1:
+                fragColor = image_abstraction();
+                break;
+        }
+        draw_comparison_bar();
+    } else {
+        fragColor = texture(tex, fs_in.texcoord);
     }
+    
 }

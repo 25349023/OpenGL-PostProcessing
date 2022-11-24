@@ -17,10 +17,17 @@ enum MainMenuEntry
 
 enum PostProcessing
 {
-    NONE,
-    IMAGE_ABSTRACTION
+    POST_NONE,
+    POST_IMAGE_ABSTRACTION
 };
 
+
+enum DragMode
+{
+    DRAG_NONE,
+    DRAG_CAMERA_EYE,
+    DRAG_COMP_BAR
+};
 
 GLubyte timer_cnt = 0;
 bool timer_enabled = true;
@@ -29,18 +36,22 @@ unsigned int timer_speed = 16;
 const aiScene* scene;
 
 GLuint program, program2;
-const GLint mv_location = 0, proj_location = 1, tex_location = 2;
-const GLint fbtex_location = 0, mode_location = 1, wsize_location = 2;
+const GLint mv_loc = 0, proj_loc = 1, tex_loc = 2;
+const GLint fbtex_loc = 0, mode_loc = 1, wsize_loc = 2, cbar_loc = 3;
 GLuint fvao, window_vbo, fbo, fbo_tex, normal_tex, depthrbo, active_ftex;
 
-int post_mode = NONE;
+int post_mode = POST_NONE;
 
 mat4 projection, view, model;
 vec3 eye(0, 0, 5), view_direction(0, 0, -1), up(0, 1, 0);
 vec3 eye_x(-1, 0, 0), eye_y(0, 1, 0), eye_z(0, 0, -1);
 
-vec2 last_drag;
+int drag_mode;
+ivec2 last_drag;
+
+
 ivec2 win_size(600, 600);
+int comparison_bar = 300;
 
 struct Vertex
 {
@@ -348,11 +359,11 @@ void My_Display()
     updateViewMatrix();
 
     mat4 mv = view * model;
-    glUniformMatrix4fv(mv_location, 1, GL_FALSE, value_ptr(mv));
-    glUniformMatrix4fv(proj_location, 1, GL_FALSE, value_ptr(projection));
+    glUniformMatrix4fv(mv_loc, 1, GL_FALSE, value_ptr(mv));
+    glUniformMatrix4fv(proj_loc, 1, GL_FALSE, value_ptr(projection));
 
     glActiveTexture(GL_TEXTURE0);
-    glUniform1i(tex_location, 0);
+    glUniform1i(tex_loc, 0);
 
     for (const auto& shape : shapes)
     {
@@ -369,9 +380,10 @@ void My_Display()
 
     glUseProgram(program2);
     glActiveTexture(GL_TEXTURE0);
-    glUniform1i(fbtex_location, 0);
-    glUniform1i(mode_location, post_mode);
-    glUniform2f(wsize_location, (float)win_size.x, (float)win_size.y);
+    glUniform1i(fbtex_loc, 0);
+    glUniform1i(mode_loc, post_mode);
+    glUniform2f(wsize_loc, (float)win_size.x, (float)win_size.y);
+    glUniform1i(cbar_loc, comparison_bar);
 
     glBindVertexArray(fvao);
     glBindTexture(GL_TEXTURE_2D, active_ftex);
@@ -385,6 +397,8 @@ void My_Reshape(int width, int height)
 {
     glViewport(0, 0, width, height);
     win_size = vec2(width, height);
+    comparison_bar = width / 2;
+
     float viewportAspect = (float)width / (float)height;
     projection = perspective(radians(60.0f), viewportAspect, 0.1f, 2000.0f);
     setupFrameBuffer();
@@ -400,27 +414,51 @@ void My_Mouse(int button, int state, int x, int y)
 {
     if (state == GLUT_DOWN)
     {
+        if (comparison_bar - 10 < x && x < comparison_bar + 10 && post_mode != POST_NONE)
+        {
+            drag_mode = DRAG_COMP_BAR;
+        }
+        else
+        {
+            drag_mode = DRAG_CAMERA_EYE;
+        }
         last_drag = vec2(x, y);
     }
     else if (state == GLUT_UP)
     {
-        // printf("Mouse %d is released at (%d, %d)\n", button, x, y);
+        drag_mode = DRAG_NONE;
     }
 }
 
 void My_Motion(int x, int y)
 {
-    vec2 change = 0.2f * (last_drag - vec2(x, y));
+    switch (drag_mode)
+    {
+    case DRAG_NONE:
+        break;
+    case DRAG_CAMERA_EYE:
+        {
+            vec2 change = 0.2f * vec2(last_drag - ivec2(x, y));
 
-    int sign = (view_direction.z > 0) ? -1 : 1;
-    mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
+            int sign = (view_direction.z > 0) ? -1 : 1;
+            mat4 R = mat4_cast(quat(vec3(radians(sign * change.y), radians(change.x), 0)));
 
-    view_direction = (R * vec4(view_direction, 1)).xyz;
-    eye_z = (R * vec4(eye_z, 1)).xyz;
-    eye_x = normalize(cross(up, eye_z));
-    eye_y = normalize(cross(eye_z, eye_x));
+            view_direction = (R * vec4(view_direction, 1)).xyz;
+            eye_z = (R * vec4(eye_z, 1)).xyz;
+            eye_x = normalize(cross(up, eye_z));
+            eye_y = normalize(cross(eye_z, eye_x));
 
-    last_drag = vec2(x, y);
+            last_drag = vec2(x, y);
+            break;
+        }
+    case DRAG_COMP_BAR:
+        comparison_bar += x - last_drag.x;
+        comparison_bar = std::max(0, std::min(comparison_bar, win_size.x));
+        last_drag = vec2(x, y);
+        break;
+    default:
+        break;
+    }
 }
 
 void My_Keyboard(unsigned char key, int x, int y)
@@ -486,10 +524,10 @@ void My_Menu(int id)
         active_ftex = (active_ftex == fbo_tex) ? normal_tex : fbo_tex;
         break;
     case MENU_NONE:
-        post_mode = NONE;
+        post_mode = POST_NONE;
         break;
     case MENU_IMAGE_ABSTRACTION:
-        post_mode = IMAGE_ABSTRACTION;
+        post_mode = POST_IMAGE_ABSTRACTION;
         break;
     case MENU_EXIT:
         exit(0);
